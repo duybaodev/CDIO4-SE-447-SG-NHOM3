@@ -1,0 +1,28 @@
+/* 1. Nạp các cấu hình cốt lõi của Tailwind CSS */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 2. Hiệu ứng uốn lượn nền Gradient động cho trang Đăng nhập */
+@keyframes gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* 3. Hiệu ứng nổi bọt bập bềnh cho Logo REMN */
+@keyframes floating {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
