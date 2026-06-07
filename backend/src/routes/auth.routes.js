@@ -1,20 +1,20 @@
 const express = require("express");
-
+const {
+  register,
+  login,
+  forgotPassword,
+  resetPassword,
+  googleLogin, // 🎯 1. Import thêm hàm xử lý Google vừa được bổ sung bên Controller
+} = require("../controllers/authController");
 const router = express.Router();
 
-// POST /register
-router.post("/register", (req, res) => {
-  res.json({ message: "Register endpoint hit" });
-});
+// 🚀 Thông tuyến dữ liệu: Đẩy thẳng lệnh đăng ký vào Controller để xử lý DB và bắn Mail
+router.post("/register", register);
+router.post("/login", login);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
 
-// POST /login
-router.post("/login", (req, res) => {
-  res.json({ message: "Login endpoint hit" });
-});
-
-// GET /me
-router.get("/me", (req, res) => {
-  res.json({ message: "Get user info endpoint hit" });
-});
+// 🎯 2. Định nghĩa tuyến đường xử lý đăng nhập Google mà Frontend đang gọi bị 404
+router.post("/google-login", googleLogin);
 
 module.exports = router;

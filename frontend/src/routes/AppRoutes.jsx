@@ -15,6 +15,9 @@ import TechDashboard from "../pages/tech/TechDashboard";
 import Devices from "../pages/tech/Devices";
 import Logs from "../pages/tech/Logs";
 import AdminDashboard from "../pages/admin/AdminDashboard";
+import ForgotPassword from "../pages/ForgotPassword";
+import Dashboard from "../pages/Dashboard";
+
 // 2. Khối giữ chỗ tạm thời cho các trang chưa làm (Đảm bảo không bị crash lỗi)
 const Placeholder = ({ name }) => (
   <div className="min-h-screen bg-[#faf8ff] flex flex-col justify-center items-center font-sans text-slate-700">
@@ -37,22 +40,32 @@ const Placeholder = ({ name }) => (
 const AppRoutes = () => {
   return (
     <Routes>
-      {/* Các tuyến đường kết nối hệ thống */}
+      {/* Tuyến đường cổng vào ứng dụng */}
       <Route path="/" element={<Welcome />} />
       <Route path="/login-form" element={<Login />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/dashboard" element={<Home />} />
-      <Route path="/map" element={<Map />} />{" "}
+
+      {/* 🔥 ĐỔI TUYẾN ĐƯỜNG NÀY: Trỏ thẳng /dashboard vào giao diện Dashboard mới tích hợp biểu đồ & AI của Bảo */}
+      <Route path="/dashboard" element={<Dashboard />} />
+
+      {/* Giữ lại trang Home cũ của nhóm tại đường dẫn dự phòng để đối chiếu nếu cần */}
+      <Route path="/old-home" element={<Home />} />
+
       {/* Tuyến đường dẫn sang trang Bản đồ thật */}
-      {/* Các trang còn lại đang đợi Bảo thiết kế tiếp */}
+      <Route path="/map" element={<Map />} />
+
+      {/* Các trang còn lại trong hệ thống REMN */}
       <Route path="/ranking" element={<Ranking />} />
       <Route path="/news" element={<News />} />
       <Route path="/profile" element={<Profile />} />
-      <Route path="*" element={<NotFound />} />
       <Route path="/tech/dashboard" element={<TechDashboard />} />
       <Route path="/tech/devices" element={<Devices />} />
       <Route path="/tech/logs" element={<Logs />} />
       <Route path="/admin/dashboard" element={<AdminDashboard />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+
+      {/* Điều hướng các đường dẫn lạ về trang 404 Not Found */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 };
