@@ -2,19 +2,16 @@ const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
 const News = require("../models/News"); // Gọi Model tin tức thật
-
 // Middleware bảo vệ nghiêm ngặt quyền Admin đăng bài
 const requireAdminInternal = (req, res, next) => {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(" ")[1];
   if (!token)
-    return res
-      .status(403)
-      .json({
-        success: false,
-        isGuest: true,
-        message: "🔒 Vui lòng đăng nhập quyền quản trị!",
-      });
+    return res.status(403).json({
+      success: false,
+      isGuest: true,
+      message: "🔒 Vui lòng đăng nhập quyền quản trị!",
+    });
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "REMN_SECRET");
@@ -72,13 +69,11 @@ router.post(
         await news.save();
       }
 
-      return res
-        .status(200)
-        .json({
-          success: true,
-          message: "Đã đồng bộ bài viết lên hệ thống thành công!",
-          data: news,
-        });
+      return res.status(200).json({
+        success: true,
+        message: "Đã đồng bộ bài viết lên hệ thống thành công!",
+        data: news,
+      });
     } catch (error) {
       next(error);
     }

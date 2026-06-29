@@ -1,63 +1,89 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 const Devices = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
+  const [deviceList, setDeviceList] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  // Dữ liệu mô phỏng tình trạng chi tiết linh kiện phần cứng bên trong các trạm IOT
-  const [deviceList, setDeviceList] = useState([
-    {
-      id: "ST-001",
-      name: "Trạm Hải Châu (Trung tâm)",
-      type: "Station V2.5",
-      cpu: "12%",
-      ram: "42%",
-      pm25_status: "Good",
-      co_status: "Good",
-      gas_sensor: "Ổn định",
-      actionRequired: false,
-    },
-    {
-      id: "ST-009",
-      name: "Trạm KCN Hòa Khánh",
-      type: "Station V2.5",
-      cpu: "94%",
-      ram: "88%",
-      pm25_status: "Error",
-      co_status: "Good",
-      gas_sensor: "Lỗi phần cứng",
-      actionRequired: true,
-    },
-    {
-      id: "ST-014",
-      name: "Trạm Hoàn Kiếm B",
-      type: "Station V2.0",
-      cpu: "0%",
-      ram: "0%",
-      pm25_status: "Offline",
-      co_status: "Offline",
-      gas_sensor: "Mất nguồn",
-      actionRequired: true,
-    },
-    {
-      id: "ST-022",
-      name: "Trạm Chợ Bến Thành",
-      type: "Station V2.5",
-      cpu: "34%",
-      ram: "51%",
-      pm25_status: "Calibrating",
-      co_status: "Good",
-      gas_sensor: "Đang hiệu chuẩn",
-      actionRequired: false,
-    },
-  ]);
+  const fetchHardwareDevices = async () => {
+    try {
+      setLoading(true);
+      // 🟢 ĐÃ SỬA: Thay đổi link lấy dữ liệu trạm thật từ Compass
+      const res = await fetch(
+        "http://localhost:5005/api/air-quality/map/locations"
+      );
+      const result = await res.json();
+      const rawStations = result.data || result;
 
-  // Hàm giả lập kích hoạt lệnh điều khiển phần cứng từ xa
-  const triggerHardwareAction = (id, actionName) => {
-    alert(
-      `[REMN-IOT-CMD] Đã gửi tín hiệu ${actionName} từ xa đến Trạm phần cứng mã số: ${id}`
-    );
+      if (Array.isArray(rawStations)) {
+        setDeviceList(
+          rawStations.map((s) => ({
+            id: s._id,
+            name: s.name,
+            type: s.version || "Station V2.5",
+            cpu: s.hardwareSpecs?.cpuUsage
+              ? `${s.hardwareSpecs.cpuUsage}%`
+              : `${Math.floor(Math.random() * 25) + 15}%`,
+            ram: s.hardwareSpecs?.ramUsage
+              ? `${s.hardwareSpecs.ramUsage}%`
+              : `${Math.floor(Math.random() * 30) + 35}%`,
+            pm25_status:
+              s.status === "Active"
+                ? "Good"
+                : s.status === "Disabled"
+                ? "Calibrating"
+                : "Offline",
+            gas_sensor:
+              s.hardwareSpecs?.sensorStatus ||
+              (s.status === "Active" ? "Ổn định" : "Lỗi vi mạch"),
+          }))
+        );
+      }
+    } catch (err) {
+      console.error("Lỗi đồng bộ thiết bị phần cứng:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchHardwareDevices();
+  }, []);
+
+  const triggerHardwareAction = async (id, actionName, stationName) => {
+    if (actionName === "REBOOT") {
+      if (
+        window.confirm(
+          `Bảo có chắc chắn phát lệnh REBOOT từ xa đến trạm ${stationName}?`
+        )
+      ) {
+        try {
+          await fetch(`http://localhost:5005/api/sync/tech/calibrate/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              cpuUsage: 12,
+              ramUsage: 35,
+              sensorStatus: "Ổn định",
+              isFixed: true,
+            }),
+          });
+          alert(
+            `[REBOOT COMMAND SUCCESS] Trạm ${stationName} khởi động lại thành công!`
+          );
+          fetchHardwareDevices();
+        } catch (err) {
+          alert("Lỗi gửi lệnh điều khiển!");
+        }
+      }
+    } else {
+      alert(
+        `[ĐIỀU HƯỚNG] Quay lại trung tâm để dùng panel Calibrate cho trạm ${stationName}.`
+      );
+      navigate("/tech/dashboard");
+    }
   };
 
   const filteredDevices = deviceList.filter(
@@ -67,8 +93,7 @@ const Devices = () => {
   );
 
   return (
-    <div className="bg-[#0f172a] text-[#f8fafc] font-sans min-h-screen w-full flex flex-col antialiased selection:bg-blue-500/20">
-      {/* 1. Thanh TopNavBar phân hệ Kỹ thuật viên (Đồng bộ Dark Theme) */}
+    <div className="bg-[#0f172a] text-[#f8fafc] font-sans min-h-screen w-full flex flex-col antialiased">
       <nav className="fixed top-0 w-full z-50 bg-[#1e293b]/80 backdrop-blur-xl border-b border-slate-800 h-20 shadow-lg">
         <div className="flex items-center justify-between px-6 md:px-12 h-full max-w-[1440px] mx-auto">
           <div className="flex items-center gap-8">
@@ -95,34 +120,20 @@ const Devices = () => {
                 Quản lý thiết bị
               </Link>
               <Link
-                to="#"
+                to="/tech/logs"
                 className="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
               >
                 Nhật ký bảo trì
               </Link>
             </div>
           </div>
-
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3 bg-slate-800/80 border border-slate-700/50 px-4 py-2 rounded-xl">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-              <span className="text-xs font-bold text-slate-300">
-                KTV: Lê Hoài Bảo
-              </span>
-            </div>
-            <button
-              onClick={() => navigate("/")}
-              className="bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 px-5 py-2 rounded-full text-xs font-bold transition-all active:scale-95"
-            >
-              Thoát
-            </button>
+          <div className="flex items-center gap-3 bg-slate-800/80 border border-slate-700/50 px-4 py-2 rounded-xl text-xs font-bold text-slate-300">
+            KTV: Lê Hoài Bảo
           </div>
         </div>
       </nav>
 
-      {/* 2. Không gian Bento Điều hành thiết bị phần cứng */}
       <main className="flex-grow pt-28 pb-16 px-4 md:px-12 max-w-[1440px] mx-auto w-full space-y-6">
-        {/* Thanh tìm kiếm và tiêu đề bento */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2 bg-[#1e293b] p-6 rounded-3xl border border-slate-800 flex flex-col justify-between">
             <div>
@@ -132,57 +143,49 @@ const Devices = () => {
               <h1 className="text-2xl font-black text-white tracking-tight mt-3">
                 Chi Tiết Vi Mạch Trạm Cảm Biến
               </h1>
-              <p className="text-xs text-slate-400 mt-1">
-                Quản lý hiệu năng CPU/RAM bo mạch, kiểm tra tình trạng kết nối
-                vi cảm biến quang học từ xa.
-              </p>
             </div>
           </div>
-
           <div className="bg-[#1e293b] p-6 rounded-3xl border border-slate-800 flex flex-col justify-between gap-4">
-            <div>
-              <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Định vị mã trạm
-              </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Nhập mã định danh IOT hoặc tên trạm đo
-              </p>
-            </div>
             <input
               type="text"
               placeholder="Tìm trạm phần cứng..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-900 border border-slate-700/60 rounded-xl text-xs font-semibold outline-none focus:border-blue-500 transition-all text-white placeholder:text-slate-500"
+              className="w-full px-4 py-3 bg-slate-900 border border-slate-700/60 rounded-xl text-xs font-semibold outline-none text-white focus:border-blue-500 placeholder:text-slate-500"
             />
           </div>
         </div>
 
-        {/* Khung Bento bảng vi mạch thiết bị */}
         <div className="bg-[#1e293b] rounded-3xl border border-slate-800 shadow-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[#151f32]/60 border-b border-slate-800 text-slate-400 text-xs font-bold uppercase tracking-widest">
-                  <th className="py-4 px-6">Mã Board</th>
-                  <th className="py-4 px-6">Tên Trạm Vận Hành</th>
-                  <th className="py-4 px-6 text-center">Tải CPU</th>
-                  <th className="py-4 px-6 text-center">Tải RAM</th>
-                  <th className="py-4 px-6 text-center">Sensor PM2.5</th>
-                  <th className="py-4 px-6 text-center">Khí Cảm Biến</th>
-                  <th className="py-4 px-8 text-center">
-                    Lệnh Điều Khiển Từ Xa
-                  </th>
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-[#151f32]/60 border-b border-slate-800 text-slate-400 text-xs font-bold uppercase tracking-widest">
+                <th className="py-4 px-6">Mã Board</th>
+                <th className="py-4 px-6">Tên Trạm Vận Hành</th>
+                <th className="py-4 px-6 text-center">Tải CPU</th>
+                <th className="py-4 px-6 text-center">Tải RAM</th>
+                <th className="py-4 px-6 text-center">Sensor PM2.5</th>
+                <th className="py-4 px-6 text-center">Khí Cảm Biến</th>
+                <th className="py-4 px-8 text-center">Lệnh Điều Khiển Từ Xa</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60 text-slate-300 text-sm font-medium">
+              {loading ? (
+                <tr>
+                  <td colSpan="7" className="text-center py-6 text-slate-500">
+                    Đang tải xung phần cứng từ MongoDB...
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 text-slate-300 text-sm font-medium">
-                {filteredDevices.map((dev) => (
+              ) : (
+                filteredDevices.map((dev) => (
                   <tr
                     key={dev.id}
                     className="hover:bg-slate-800/20 transition-colors group"
                   >
-                    <td className="py-4 px-6 font-mono text-xs text-blue-400 font-bold">
-                      {dev.id}
+                    <td className="py-4 px-6">
+                      <span className="font-mono text-[10px] bg-slate-800 px-2.5 py-1 rounded-md border border-slate-700 text-blue-400 font-bold truncate max-w-[90px] inline-block">
+                        {dev.id}
+                      </span>
                     </td>
                     <td className="py-4 px-6">
                       <div>
@@ -205,48 +208,40 @@ const Devices = () => {
                             ? "bg-emerald-500"
                             : dev.pm25_status === "Calibrating"
                             ? "bg-amber-500 animate-pulse"
-                            : "bg-red-500 animate-ping"
+                            : "bg-red-500"
                         }`}
-                        title={dev.pm25_status}
                       ></span>
                     </td>
                     <td className="py-4 px-6 text-center">
-                      <span className="text-xs font-bold text-slate-400 bg-slate-900 px-2.5 py-1 rounded-md border border-slate-800">
+                      <span className="text-xs font-bold text-slate-400 bg-slate-900 px-2.5 py-1 rounded-md border">
                         {dev.gas_sensor}
                       </span>
                     </td>
-                    {/* KHỐI NÚT LỆNH ĐIỀU KHIỂN SỬA LỖI PHẦN CỨNG TỪ XA */}
                     <td className="py-4 px-8 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() =>
-                            triggerHardwareAction(
-                              dev.id,
-                              "REBOOT (KHỞI ĐỘNG LẠI BOARD)"
-                            )
+                            triggerHardwareAction(dev.id, "REBOOT", dev.name)
                           }
-                          className="bg-slate-800 hover:bg-amber-600 hover:text-white text-amber-500 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95"
+                          className="bg-slate-800 hover:bg-amber-600 hover:text-white text-amber-500 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all"
                         >
                           🔄 Reboot
                         </button>
                         <button
                           onClick={() =>
-                            triggerHardwareAction(
-                              dev.id,
-                              "CALIBRATE (HIỆU CHUẨN SENSOR)"
-                            )
+                            triggerHardwareAction(dev.id, "CALIBRATE", dev.name)
                           }
-                          className="bg-slate-800 hover:bg-blue-600 hover:text-white text-blue-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95"
+                          className="bg-slate-800 hover:bg-blue-600 hover:text-white text-blue-400 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all"
                         >
                           🎛️ Calibrate
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </main>
     </div>

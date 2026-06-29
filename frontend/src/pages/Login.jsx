@@ -56,20 +56,26 @@ const Login = () => {
         localStorage.setItem("REMN_USER_TOKEN", result.data.token);
         localStorage.setItem("REMN_USER_ROLE", result.data.role);
 
+        // 🟢 ĐÃ BỔ SUNG: Lưu giữ nguyên vẹn Object định danh tài khoản thật từ database để thông mạch Profile & Báo lỗi
+        localStorage.setItem("REMN_CURRENT_USER", JSON.stringify(result.data));
+
         alert(
           `🎉 Đăng nhập thành công! Chào mừng Kỹ sư ${result.data.username} trở lại.`
         );
 
-        // Phân luồng điều hướng trang dựa theo chức vụ (Role) được lưu trong MongoDB
-        if (result.data.role === "admin") {
+        // Phân luồng điều hướng trang dựa theo chức vụ (Role) được lưu trong MongoDB (Hóa giải chữ Hoa/Thường)
+        const userRole = result.data.role
+          ? result.data.role.toLowerCase()
+          : "user";
+        if (userRole === "admin") {
           navigate("/admin/dashboard");
-        } else if (result.data.role === "tech") {
+        } else if (userRole === "tech") {
           navigate("/tech/dashboard");
         } else {
           navigate("/dashboard");
         }
       } else {
-        // Hiện thông báo lỗi trả về từ kiến trúc Backend (Ví dụ: Sai mật khẩu, Chưa verify mail OTP)
+        // Hiện thông báo lỗi trả về từ kiến trúc Backend
         alert(`❌ Lỗi đăng nhập: ${result.message}`);
       }
     } catch (error) {
@@ -217,6 +223,7 @@ const Login = () => {
 
                       if (result.success) {
                         alert("🎉 Đăng nhập bằng tài khoản Google thành công!");
+
                         // Lưu trữ dữ liệu cấu trúc thực tế vào hệ thống trình duyệt
                         localStorage.setItem(
                           "REMN_USER_TOKEN",
@@ -227,10 +234,19 @@ const Login = () => {
                           result.data.role
                         );
 
-                        // Điều hướng mượt mà dựa theo chức vụ của tài khoản Google vừa trả về
-                        if (result.data.role === "admin") {
+                        // 🟢 ĐÃ BỔ SUNG: Găm danh tính thật của tài khoản Google Cloud vào cùng một key đồng bộ
+                        localStorage.setItem(
+                          "REMN_CURRENT_USER",
+                          JSON.stringify(result.data)
+                        );
+
+                        // Điều hướng mượt mà dựa theo chức vụ của tài khoản Google vừa trả về (Hóa giải chữ Hoa/Thường)
+                        const googleUserRole = result.data.role
+                          ? result.data.role.toLowerCase()
+                          : "user";
+                        if (googleUserRole === "admin") {
                           navigate("/admin/dashboard");
-                        } else if (result.data.role === "tech") {
+                        } else if (googleUserRole === "tech") {
                           navigate("/tech/dashboard");
                         } else {
                           navigate("/dashboard");
