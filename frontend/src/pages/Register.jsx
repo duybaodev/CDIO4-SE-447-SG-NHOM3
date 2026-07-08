@@ -1,9 +1,19 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const Register = () => {
+  const navigate = useNavigate();
+
   // State quản lý xem trước Avatar
   const [avatarSrc, setAvatarSrc] = useState(null);
+
+  // 🎯 Bộ State quản lý dữ liệu Input đồng bộ chuẩn xác với cấu trúc Backend
+  const [fullName, setFullName] = useState("");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [city, setCity] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   // State quản lý độ mạnh mật khẩu
   const [password, setPassword] = useState("");
@@ -16,11 +26,11 @@ const Register = () => {
   const [toastIcon, setToastIcon] = useState("info");
   const [toastIconColor, setToastIconColor] = useState("#0058be");
 
-  // 1. Logic sinh hạt bay ngầm (Weather Particles) giống bản gốc của Bảo
+  // 1. Logic sinh hạt bay ngầm (Weather Particles)
   useEffect(() => {
     const container = document.getElementById("particle-container");
     if (!container) return;
-    container.innerHTML = ""; // Clear cũ nếu có
+    container.innerHTML = "";
     const particleCount = 40;
 
     for (let i = 0; i < particleCount; i++) {
@@ -70,34 +80,76 @@ const Register = () => {
     }
   };
 
-  // 4. Xử lý Submit Form và hiển thị Toast Mô phỏng
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  // 🎯 4. XỬ LÝ SUBMIT FORM VÀ GỌI API ĐĂNG KÝ THỰC TẾ
+  const handleSubmit = async (e) => {
+    e.preventDefault(); // Chặn hành vi load lại trang mặc định
 
-    // Hiện Toast đang xử lý
+    // Rào chắn bảo mật kiểm tra trùng khớp mật khẩu nhập vào
+    if (password !== confirmPassword) {
+      setToastMsg("Mật khẩu xác nhận không trùng khớp!");
+      setToastIcon("info");
+      setToastIconColor("#EF4444");
+      setToastVisible(true);
+      setTimeout(() => setToastVisible(false), 3000);
+      return;
+    }
+
+    // Bật hiệu ứng Toast thông báo trạng thái chờ xử lý gửi Mail
     setToastVisible(true);
-    setToastMsg("Đang xác thực thông tin...");
+    setToastMsg("Đang xử lý đăng ký và gửi Mail...");
     setToastIcon("info");
     setToastIconColor("#0058be");
 
-    setTimeout(() => {
-      setToastMsg("Chào mừng bạn gia nhập REMN!");
-      setToastIcon("verified");
-      setToastIconColor("#22C55E");
-    }, 2000);
+    try {
+      // 🚀 Thực hiện bắn dữ liệu chính xác lên cổng 5005 của Backend Express
+      const response = await fetch("http://localhost:5005/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: username.trim(), // Đảm bảo lọc bỏ dấu cách thừa nếu có
+          email: email.trim(),
+          password: password,
+          role: "user",
+        }),
+      });
 
-    setTimeout(() => {
-      setToastVisible(false);
-    }, 5000);
+      const result = await response.json();
+
+      if (result.success) {
+        // Cập nhật Toast thông báo trạng thái nổ chuông Gmail thành công
+        setToastMsg("Đăng ký thành công! Hãy kiểm tra hộp thư Gmail của bạn.");
+        setToastIcon("verified");
+        setToastIconColor("#22C55E");
+
+        // Giữ thông báo hiển thị 3.5 giây để người dùng đọc rồi chuyển hướng về trang đăng nhập
+        setTimeout(() => {
+          setToastVisible(false);
+          navigate("/login-form");
+        }, 3500);
+      } else {
+        // Bóc tách lỗi hệ thống hoặc trùng lặp tài khoản từ MongoDB trả ngược về giao diện
+        setToastMsg(result.message || "Tài khoản hoặc Email đã tồn tại!");
+        setToastIcon("info");
+        setToastIconColor("#EF4444");
+        setTimeout(() => setToastVisible(false), 4000);
+      }
+    } catch (error) {
+      setToastMsg("Không thể kết nối đến Máy chủ Backend Express!");
+      setToastIcon("info");
+      setToastIconColor("#EF4444");
+      setTimeout(() => setToastVisible(false), 4000);
+    }
   };
 
   // Hàm trả màu cho thanh đo độ mạnh mật khẩu
   const getBarColor = (index) => {
-    if (index >= strength) return "#e2e7ff"; // Màu xám mặc định
-    if (strength === 1) return "#EF4444"; // Đỏ
-    if (strength === 2) return "#F97316"; // Cam
-    if (strength === 3) return "#EAB308"; // Vàng
-    if (strength === 4) return "#22C55E"; // Xanh lá
+    if (index >= strength) return "#e2e7ff";
+    if (strength === 1) return "#EF4444";
+    if (strength === 2) return "#F97316";
+    if (strength === 3) return "#EAB308";
+    if (strength === 4) return "#22C55E";
     return "#e2e7ff";
   };
 
@@ -113,7 +165,6 @@ const Register = () => {
               src="https://lh3.googleusercontent.com/aida-public/AB6AXuD7IReJdygtHtdULiADM4uuI7gKM6FRPo8VyfR7rk8LHmtxSE2nWd5AuXhTb_VnoBO98RLRODHTmQUnqvKjr9eQi86z3HY18kp_AVZfz8Faxq9-uxin0HUn0n4dr6eXrkobGqrGo8Opt2mGsrfeXgq2ve4XpJOe7gikGJMTytwsk_BOsoFd2D3OCVsQkqGSMfScHo3unYz5Ia591DktWyJvmG6ZbAtGCR2hoj7H9ef_nyN5029jlgXmcsvq3I0OsdQ6JudlElcIDsA"
             />
           </div>
-          {/* Cột chứa hạt bay */}
           <div className="absolute inset-0 z-10" id="particle-container"></div>
 
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-12 text-center bg-black/5">
@@ -146,7 +197,7 @@ const Register = () => {
 
         {/* RIGHT SIDE: Registration Form */}
         <section className="w-full lg:w-1/2 flex items-center justify-center p-6 md:p-12 bg-[#faf8ff] overflow-y-auto z-10 h-full">
-          <div className="w-full max-w-lg my-auto py-6">
+          <div className="w-full max-w-[480px] my-auto py-6">
             <div className="mb-6 flex justify-between items-center">
               <div>
                 <h2 className="text-3xl font-black text-[#0058be] tracking-tight">
@@ -168,7 +219,7 @@ const Register = () => {
             {/* Registration Form Box */}
             <form
               onSubmit={handleSubmit}
-              className="bg-white/70 backdrop-blur-xl p-6 rounded-2xl shadow-2xl border border-white/50 flex flex-col gap-5"
+              className="bg-white/70 backdrop-blur-xl p-6 rounded-2xl shadow-2xl border border-white/50 flex flex-col gap-4"
             >
               {/* Avatar Upload Selection */}
               <div className="flex items-center gap-4 mb-1">
@@ -206,17 +257,21 @@ const Register = () => {
                 <div className="relative">
                   <input
                     required
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white/50 focus:ring-2 focus:ring-[#0058be]/20 focus:border-[#0058be] outline-none transition-all text-sm"
-                    placeholder="Họ và tên"
                     type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white/50 focus:ring-2 focus:ring-[#0058be]/20 focus:border-[#0058be] outline-none transition-all text-sm font-semibold"
+                    placeholder="Họ và tên"
                   />
                 </div>
                 <div className="relative">
                   <input
                     required
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white/50 focus:ring-2 focus:ring-[#0058be]/20 focus:border-[#0058be] outline-none transition-all text-sm"
-                    placeholder="Tên đăng nhập"
                     type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white/50 focus:ring-2 focus:ring-[#0058be]/20 focus:border-[#0058be] outline-none transition-all text-sm font-semibold"
+                    placeholder="Tên đăng nhập"
                   />
                 </div>
               </div>
@@ -226,17 +281,21 @@ const Register = () => {
                 <div className="relative">
                   <input
                     required
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white/50 focus:ring-2 focus:ring-[#0058be]/20 focus:border-[#0058be] outline-none transition-all text-sm"
-                    placeholder="Email"
                     type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white/50 focus:ring-2 focus:ring-[#0058be]/20 focus:border-[#0058be] outline-none transition-all text-sm font-semibold"
+                    placeholder="Email nhận mã"
                   />
                 </div>
                 <div className="relative">
                   <input
                     required
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white/50 focus:ring-2 focus:ring-[#0058be]/20 focus:border-[#0058be] outline-none transition-all text-sm"
-                    placeholder="Số điện thoại"
                     type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white/50 focus:ring-2 focus:ring-[#0058be]/20 focus:border-[#0058be] outline-none transition-all text-sm font-semibold"
+                    placeholder="Số điện thoại"
                   />
                 </div>
               </div>
@@ -245,8 +304,9 @@ const Register = () => {
               <div className="relative">
                 <select
                   required
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white/50 focus:ring-2 focus:ring-[#0058be]/20 focus:border-[#0058be] outline-none transition-all text-sm appearance-none text-slate-700"
-                  defaultValue=""
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white/50 focus:ring-2 focus:ring-[#0058be]/20 focus:border-[#0058be] outline-none transition-all text-sm appearance-none text-slate-700 font-semibold"
                 >
                   <option value="" disabled>
                     Thành phố quan tâm
@@ -261,16 +321,16 @@ const Register = () => {
                 </span>
               </div>
 
-              {/* Password Strengths fields */}
+              {/* Password fields */}
               <div className="space-y-3">
                 <div className="relative">
                   <input
                     required
+                    type="password"
                     value={password}
                     onChange={handlePasswordChange}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white/50 focus:ring-2 focus:ring-[#0058be]/20 focus:border-[#0058be] outline-none transition-all text-sm"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white/50 focus:ring-2 focus:ring-[#0058be]/20 focus:border-[#0058be] outline-none transition-all text-sm font-semibold"
                     placeholder="Mật khẩu"
-                    type="password"
                   />
                   {/* Password Strength Meter Bars */}
                   <div className="mt-2 flex gap-1 h-1">
@@ -296,14 +356,14 @@ const Register = () => {
                   </span>
                 </div>
 
-                <div className="relative">
-                  <input
-                    required
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white/50 focus:ring-2 focus:ring-[#0058be]/20 focus:border-[#0058be] outline-none transition-all text-sm"
-                    placeholder="Xác nhận mật khẩu"
-                    type="password"
-                  />
-                </div>
+                <input
+                  required
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white/50 focus:ring-2 focus:ring-[#0058be]/20 focus:border-[#0058be] outline-none transition-all text-sm font-semibold"
+                  placeholder="Xác nhận mật khẩu"
+                />
               </div>
 
               {/* Checkbox Terms Agreement */}
@@ -335,7 +395,7 @@ const Register = () => {
               {/* Submit Action Button */}
               <button
                 type="submit"
-                className="w-full py-3.5 mt-1 bg-gradient-to-r from-[#0058be] to-[#00687a] text-white font-bold rounded-xl active:scale-[0.99] hover:opacity-95 shadow-lg shadow-blue-700/20 transition-all flex items-center justify-center gap-2 group"
+                className="w-full py-3.5 mt-1 bg-gradient-to-r from-[#0058be] to-[#00687a] text-white font-bold rounded-xl active:scale-[0.99] hover:opacity-95 shadow-lg shadow-blue-700/20 transition-all flex items-center justify-center gap-2 group text-sm uppercase tracking-wider"
               >
                 <span>Đăng ký ngay</span>
                 <span className="group-hover:translate-x-1 transition-transform">
@@ -357,14 +417,14 @@ const Register = () => {
 
             {/* Custom Interactive Toast Notification */}
             <div
-              className={`fixed bottom-6 right-6 bg-white/90 backdrop-blur-md px-6 py-4 rounded-xl shadow-2xl transition-all duration-500 flex items-center gap-3 border border-slate-100 z-50 ${
+              className={`fixed bottom-6 right-6 bg-white/95 backdrop-blur-md px-6 py-4 rounded-xl shadow-2xl transition-all duration-500 flex items-center gap-3 border border-slate-100 z-50 ${
                 toastVisible
                   ? "translate-y-0 opacity-100"
                   : "translate-y-24 opacity-0 pointer-events-none"
               }`}
             >
               <span
-                className="font-bold text-lg"
+                className="font-black text-xl"
                 style={{ color: toastIconColor }}
               >
                 {toastIcon === "verified" ? "✓" : "ℹ"}

@@ -1,80 +1,142 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-// Nạp các linh kiện bản đồ thật từ thư viện
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
+// ------------------------------
+// Component hỗ trợ di chuyển bản đồ mượt
+// ------------------------------
+const ChangeMapView = ({ center, zoom = 12 }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (center) map.setView(center, zoom);
+  }, [center, map, zoom]);
+  return null;
+};
+
+// ------------------------------
+// Component chính
+// ------------------------------
 const Map = () => {
   const navigate = useNavigate();
+
+  // State dữ liệu
+  const [stations, setStations] = useState([]);
+  const [selectedStation, setSelectedStation] = useState(null);
+  const [mapCenter, setMapCenter] = useState([16.0544, 108.2022]); // Mặc định Đà Nẵng
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // State cho dropdown (giữ lại để tương thích giao diện)
   const [selectedCity, setSelectedCity] = useState("danang");
 
-  // Mảng dữ liệu tọa độ thực tế (Vĩ độ - Kinh độ) các trạm đo tại Đà Nẵng
-  const stations = [
-    {
-      id: 1,
-      name: "Trạm Hải Châu (Trung tâm)",
-      lat: 16.0678,
-      lng: 108.2208,
-      aqi: 32,
-      status: "Tốt",
-      color: "#22C55E",
-    },
-    {
-      id: 2,
-      name: "Trạm Ngũ Hành Sơn",
-      lat: 16.0335,
-      lng: 108.2515,
-      aqi: 28,
-      status: "Tốt",
-      color: "#22C55E",
-    },
-    {
-      id: 3,
-      name: "Trạm KCN Hòa Khánh",
-      lat: 16.0712,
-      lng: 108.1495,
-      aqi: 56,
-      status: "Trung bình",
-      color: "#EAB308",
-    },
-    {
-      id: 4,
-      name: "Trạm Liên Chiểu",
-      lat: 16.0945,
-      lng: 108.1652,
-      aqi: 42,
-      status: "Tốt",
-      color: "#22C55E",
-    },
-  ];
+  // ------------------------------
+  // Fetch dữ liệu từ API
+  // ------------------------------
+  useEffect(() => {
+    fetch("http://localhost:5005/api/air-quality/map/locations")
+      .then((res) => {
+        if (!res.ok) throw new Error("Không thể tải dữ liệu");
+        return res.json();
+      })
+      .then((res) => {
+        const data = res.data || res;
+        if (Array.isArray(data) && data.length > 0) {
+          setStations(data);
+          setSelectedStation(data[0]);
+          // Cập nhật tâm bản đồ theo trạm đầu tiên
+          if (data[0].coordinates) {
+            setMapCenter([data[0].coordinates.lat, data[0].coordinates.lng]);
+          }
+        } else {
+          setError("Không có dữ liệu trạm đo.");
+        }
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Lỗi fetch bản đồ:", err);
+        setError(err.message || "Lỗi kết nối đến máy chủ.");
+        setLoading(false);
+      });
+  }, []);
 
-  // Tọa độ trung tâm để camera bản đồ tập trung vào Đà Nẵng
-  const daNangCenter = [16.0544, 108.2022];
+  // ------------------------------
+  // Xử lý chọn trạm (click marker hoặc sidebar)
+  // ------------------------------
+  const handleStationSelect = (station) => {
+    setSelectedStation(station);
+    if (station.coordinates) {
+      setMapCenter([station.coordinates.lat, station.coordinates.lng]);
+    }
+  };
 
-  // Hàm tự tạo Icon hình tròn nhấp nháy bằng CSS, không lo bị lỗi thiếu file ảnh png
-  const createCustomIcon = (color) => {
-    return new L.divIcon({
-      html: `<div style="position: relative; width: 16px; height: 16px;">
-               <div style="background-color: ${color}; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>
-               <div style="position: absolute; top: 0; left: 0; background-color: ${color}; width: 16px; height: 16px; border-radius: 50%; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; opacity: 0.6; z-index: -1;"></div>
-             </div>`,
+  // ------------------------------
+  // Tạo icon marker (vòng tròn nhấp nháy theo AQI)
+  // ------------------------------
+  const createCustomIcon = (aqi) => {
+    let color = "#22C55E"; // mặc định tốt
+    if (aqi > 50 && aqi <= 100) color = "#EAB308"; // trung bình
+    else if (aqi > 100) color = "#EF4444"; // xấu
+
+    return L.divIcon({
+      html: `
+        <div style="position: relative; width: 20px; height: 20px;">
+          <div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"></div>
+          <div style="position: absolute; top: 0; left: 0; background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; opacity: 0.6; z-index: -1;"></div>
+        </div>
+      `,
       className: "custom-marker-icon",
-      iconSize: [16, 16],
-      iconAnchor: [8, 8],
+      iconSize: [20, 20],
+      iconAnchor: [10, 10],
     });
   };
 
+  // ------------------------------
+  // Hiển thị loading / lỗi
+  // ------------------------------
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-[#faf8ff]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto"></div>
+          <p className="mt-4 text-slate-600 font-semibold">
+            Đang tải dữ liệu bản đồ...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-[#faf8ff]">
+        <div className="text-center p-8 bg-white rounded-2xl shadow-lg max-w-md">
+          <p className="text-red-500 font-bold text-lg">⚠️ {error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-6 py-2 bg-primary text-white rounded-full text-sm font-bold hover:bg-primary-dark"
+          >
+            Thử lại
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ------------------------------
+  // Render giao diện chính
+  // ------------------------------
   return (
     <div className="bg-[#faf8ff] text-[#131b2e] font-sans h-screen w-full flex flex-col overflow-hidden relative">
-      {/* Thêm hiệu ứng Ping động cho icon bằng style nội bộ */}
+      {/* CSS cho hiệu ứng ping */}
       <style>{`
         @keyframes ping {
           75%, 100% { transform: scale(2.5); opacity: 0; }
         }
       `}</style>
 
-      {/* 1. Thanh TopNavBar đồng bộ hệ thống */}
+      {/* ----- Top Navbar (giữ nguyên) ----- */}
       <nav className="w-full z-50 bg-white border-b border-slate-100 shadow-sm h-20 flex-shrink-0">
         <div className="flex items-center justify-between px-6 md:px-10 h-full max-w-[1280px] mx-auto">
           <div className="flex items-center gap-6">
@@ -122,9 +184,9 @@ const Map = () => {
         </div>
       </nav>
 
-      {/* 2. Khu vực nội dung chính */}
+      {/* ----- Nội dung chính ----- */}
       <div className="flex-grow flex w-full overflow-hidden relative">
-        {/* SIDEBAR BÊN TRÁI: Danh sách thông số các trạm */}
+        {/* Sidebar bên trái */}
         <aside className="w-full md:w-[380px] bg-white border-r border-slate-100 p-6 flex flex-col justify-between flex-shrink-0 z-10 h-full overflow-y-auto">
           <div className="space-y-6">
             <div>
@@ -136,13 +198,27 @@ const Map = () => {
               </p>
             </div>
 
+            {/* Dropdown khu vực (giữ nguyên nhưng có thể điều hướng nếu muốn) */}
             <div className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
                 Khu vực quan sát
               </label>
               <select
                 value={selectedCity}
-                onChange={(e) => setSelectedCity(e.target.value)}
+                onChange={(e) => {
+                  const city = e.target.value;
+                  setSelectedCity(city);
+                  // Có thể set mapCenter theo thành phố nếu có tọa độ định sẵn
+                  const cityCoords = {
+                    danang: [16.0544, 108.2022],
+                    hanoi: [21.0285, 105.8542],
+                    hcm: [10.8231, 106.6297],
+                  };
+                  if (cityCoords[city]) {
+                    setMapCenter(cityCoords[city]);
+                    // Lọc stations theo thành phố? (nếu API hỗ trợ) – tạm thời không lọc
+                  }
+                }}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:border-primary transition-all appearance-none"
               >
                 <option value="danang">Đà Nẵng (Vị trí hiện tại)</option>
@@ -151,27 +227,53 @@ const Map = () => {
               </select>
             </div>
 
+            {/* Danh sách trạm từ API */}
             <div className="space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
-                Danh sách trạm đo thật
+                Danh sách trạm đo
               </label>
               <div className="space-y-2">
                 {stations.map((station) => (
                   <div
-                    key={station.id}
-                    className="p-3.5 border border-slate-100 rounded-xl bg-slate-50/50 hover:bg-slate-50 transition-all flex items-center justify-between cursor-pointer"
+                    key={station._id}
+                    onClick={() => handleStationSelect(station)}
+                    className={`p-3.5 border rounded-xl transition-all flex items-center justify-between cursor-pointer ${
+                      selectedStation?._id === station._id
+                        ? "bg-slate-900 border-slate-900 text-white shadow-md scale-[1.02]"
+                        : "border-slate-100 bg-slate-50/50 hover:bg-slate-50"
+                    }`}
                   >
                     <div>
-                      <p className="text-sm font-bold text-slate-800">
+                      <p
+                        className={`text-sm font-bold ${
+                          selectedStation?._id === station._id
+                            ? "text-white"
+                            : "text-slate-800"
+                        }`}
+                      >
                         {station.name}
                       </p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        Tọa độ: {station.lat}, {station.lng}
+                      <p
+                        className={`text-[11px] mt-0.5 ${
+                          selectedStation?._id === station._id
+                            ? "text-slate-300"
+                            : "text-slate-400"
+                        }`}
+                      >
+                        Tọa độ: {station.coordinates?.lat?.toFixed(4)},{" "}
+                        {station.coordinates?.lng?.toFixed(4)}
                       </p>
                     </div>
                     <div
                       className="px-3 py-1 rounded-lg text-white font-black text-sm shadow-sm"
-                      style={{ backgroundColor: station.color }}
+                      style={{
+                        backgroundColor:
+                          station.aqi <= 50
+                            ? "#22C55E"
+                            : station.aqi <= 100
+                            ? "#EAB308"
+                            : "#EF4444",
+                      }}
                     >
                       {station.aqi}
                     </div>
@@ -182,10 +284,10 @@ const Map = () => {
           </div>
         </aside>
 
-        {/* VÙNG CHỨA BẢN ĐỒ THẬT SỰ */}
+        {/* Bản đồ */}
         <section className="flex-grow h-full relative z-0">
           <MapContainer
-            center={daNangCenter}
+            center={mapCenter}
             zoom={12}
             style={{ width: "100%", height: "100%" }}
             zoomControl={true}
@@ -195,48 +297,77 @@ const Map = () => {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
-            {stations.map((station) => (
-              <Marker
-                key={station.id}
-                position={[station.lat, station.lng]}
-                icon={createCustomIcon(station.color)} // Gọi hàm sinh icon CSS không sợ lỗi file ảnh
-              >
-                <Popup>
-                  <div className="font-sans p-1 text-slate-800">
-                    <h4 className="font-bold text-sm mb-1">{station.name}</h4>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span
-                        className="text-xs font-bold px-2 py-0.5 rounded text-white"
-                        style={{ backgroundColor: station.color }}
-                      >
-                        AQI {station.aqi}
-                      </span>
-                      <span className="text-xs font-medium text-slate-500">
-                        Chất lượng: {station.status}
-                      </span>
+            {/* Component tự động căn giữa */}
+            <ChangeMapView center={mapCenter} />
+
+            {/* Các marker */}
+            {stations.map((station) =>
+              station.coordinates ? (
+                <Marker
+                  key={station._id}
+                  position={[station.coordinates.lat, station.coordinates.lng]}
+                  icon={createCustomIcon(station.aqi)}
+                  eventHandlers={{ click: () => handleStationSelect(station) }}
+                >
+                  <Popup>
+                    <div className="font-sans p-1 text-slate-800">
+                      <h4 className="font-bold text-sm mb-1">{station.name}</h4>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span
+                          className="text-xs font-bold px-2 py-0.5 rounded text-white"
+                          style={{
+                            backgroundColor:
+                              station.aqi <= 50
+                                ? "#22C55E"
+                                : station.aqi <= 100
+                                ? "#EAB308"
+                                : "#EF4444",
+                          }}
+                        >
+                          AQI {station.aqi}
+                        </span>
+                        <span className="text-xs font-medium text-slate-500">
+                          {station.aqi <= 50
+                            ? "Tốt"
+                            : station.aqi <= 100
+                            ? "Trung bình"
+                            : "Kém"}
+                        </span>
+                      </div>
+                      {station.weather && (
+                        <p className="text-xs text-slate-500 mt-1">
+                          Nhiệt độ: {station.weather.temp}°C
+                        </p>
+                      )}
                     </div>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
+                  </Popup>
+                </Marker>
+              ) : null
+            )}
           </MapContainer>
 
-          {/* Thang đo dải màu cố định ở góc phải */}
+          {/* Thang đo màu (giữ nguyên) */}
           <div className="absolute bottom-6 right-6 bg-white/90 backdrop-blur-md p-4 rounded-2xl border border-slate-200/50 shadow-xl max-w-[240px] w-full space-y-2 z-[1000]">
             <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
               Ngưỡng chỉ số
             </h4>
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <div className="w-4 h-2.5 bg-[#22C55E] rounded"></div>
+                <div className="w-4 h-[10px] bg-[#22C55E] rounded"></div>
                 <span className="text-[11px] font-medium text-slate-600">
                   0 - 50: Tốt
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-4 h-2.5 bg-[#EAB308] rounded"></div>
+                <div className="w-4 h-[10px] bg-[#EAB308] rounded"></div>
                 <span className="text-[11px] font-medium text-slate-600">
                   51 - 100: Trung bình
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-[10px] bg-[#EF4444] rounded"></div>
+                <span className="text-[11px] font-medium text-slate-600">
+                  &gt; 100: Kém
                 </span>
               </div>
             </div>

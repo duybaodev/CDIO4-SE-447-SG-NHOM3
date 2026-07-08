@@ -1,9 +1,31 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 const Welcome = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams(); // Hook bóc tách chuỗi tham số Token găm từ nút bấm Gmail sang
+
   // Quản lý trạng thái chuyển slide tính năng cho trực quan
   const [activeSlide, setActiveSlide] = useState(0);
+
+  // 🔄 LUỒNG XỬ LÝ: ĐÓN ĐẦU ĐƯỜNG DẪN VẠN NĂNG (MAGIC LINK) TỪ GMAIL GỬI SANG
+  useEffect(() => {
+    const token = searchParams.get("token");
+    const autoLogin = searchParams.get("autoLogin");
+
+    if (token && autoLogin === "true") {
+      // 💾 Găm Token bảo mật danh tính thực tế vào trình duyệt máy người dùng
+      localStorage.setItem("REMN_USER_TOKEN", token);
+      localStorage.setItem("REMN_USER_ROLE", "user"); // Mặc định tài khoản tự đăng ký là người dân (user)
+
+      alert(
+        "🚀 Xác thực tài khoản từ Gmail thành công! Hệ thống đang đưa bạn tiến thẳng vào Trang chủ..."
+      );
+
+      // Đưa người dùng vượt rào đăng nhập, tiến thẳng vào không gian số Dashboard dữ liệu thật
+      navigate("/dashboard");
+    }
+  }, [searchParams, navigate]);
 
   const features = [
     {
@@ -46,18 +68,18 @@ const Welcome = () => {
             </p>
 
             {/* Widget hiển thị trạm đo thực tế tại Đà Nẵng */}
-            <div className="bg-white/20 backdrop-blur-xl border border-white/30 p-6 rounded-2xl text-left shadow-lg backdrop-filter mt-8 hover:scale-105 transition-all duration-300">
-              <div className="flex justify-between items-center mb-3">
+            <div className="bg-white/20 backdrop-blur-xl border border-white/30 p-6 rounded-2xl text-center shadow-lg backdrop-filter mt-8 hover:scale-105 transition-all duration-300">
+              <div className="flex justify-center items-center mb-3">
                 <span className="text-xs font-semibold opacity-90 flex items-center gap-1.5">
                   📍 Vị trí của bạn
                 </span>
-                <span className="w-2.5 h-2.5 bg-[#22C55E] rounded-full animate-ping"></span>
+                <span className="w-2.5 h-2.5 bg-[#22C55E] rounded-full animate-ping ml-2"></span>
               </div>
               <h3 className="text-xl font-bold mb-4">Đà Nẵng, VN</h3>
-              <div className="flex items-baseline gap-3">
+              <div className="flex items-baseline justify-center gap-3">
                 <span className="text-5xl font-black tracking-tighter">32</span>
                 <div>
-                  <span className="text-xs bg-[#22C55E] px-2 py-0.5 rounded-md font-bold block w-fit">
+                  <span className="text-xs bg-[#22C55E] px-2 py-0.5 rounded-md font-bold block w-fit mx-auto">
                     Tốt
                   </span>
                   <span className="text-[10px] opacity-70 block mt-0.5">
@@ -87,7 +109,7 @@ const Welcome = () => {
               </p>
             </div>
 
-            {/* Bộ đôi nút bấm điều hướng siêu chất - Đã làm sạch lỗi comment */}
+            {/* Bộ đôi nút bấm điều hướng siêu chất */}
             <div className="flex flex-col sm:flex-row gap-4 w-full">
               <Link
                 to="/register"
