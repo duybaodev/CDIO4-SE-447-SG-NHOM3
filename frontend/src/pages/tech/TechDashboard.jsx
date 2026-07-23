@@ -1,11 +1,31 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
+
+const STATIONS_URL = "http://localhost:5005/api/air-quality/map/locations";
+const INCIDENTS_URL = "http://localhost:5005/api/sync/admin/incidents";
+const CALIBRATE_URL = "http://localhost:5005/api/sync/tech/calibrate";
+
+const normalizeCriticalStation = (inc) => ({
+  id: inc.locationId?._id || "unknown",
+  incidentId: inc._id,
+  name: inc.locationId?.name || "Trạm khí tượng REMN",
+  region:
+    inc.locationId?.region === "Trung"
+      ? "Liên Chiểu, Đà Nẵng"
+      : inc.locationId?.region === "Bac"
+      ? "Hoàn Kiếm, Hà Nội"
+      : "Quận 1, TP. HCM",
+  issue: inc.issueDescription,
+  battery: inc.status === "Pending" ? "12%" : "68%",
+  signal: inc.status === "Pending" ? "Yếu (-85 dBm)" : "Tốt (-52 dBm)",
+  status: inc.status === "Pending" ? "Critical" : "Warning",
+  time: "Thời gian thực",
+});
 
 const TechDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
-  // --- CÁC STATE QUẢN LÝ DỮ LIỆU THẬT ĐỒNG BỘ 100% ---
   const [systemStatus, setSystemStatus] = useState({
     totalStations: 0,
     onlineStations: 0,
@@ -14,7 +34,6 @@ const TechDashboard = () => {
   });
   const [criticalStations, setCriticalStations] = useState([]);
 
-  // State điều khiển hành động khi KTV bấm nút hiệu chuẩn vi mạch
   const [selectedStation, setSelectedStation] = useState(null);
   const [calibrateForm, setCalibrateForm] = useState({
     cpuUsage: 12,
@@ -23,52 +42,24 @@ const TechDashboard = () => {
     isFixed: true,
   });
 
-  // =========================================================================
-  // 📥 ĐỒNG BỘ ĐỔ DỮ LIỆU LIÊN KẾT TỪ DATABASE TỔNG TÀI
-  // =========================================================================
-  const fetchTechDashboardData = async () => {
+  const fetchTechDashboardData = useCallback(async () => {
     try {
       setLoading(true);
 
-      // 1. Tải toàn bộ trạm đo thô từ hệ thống để đếm số lượng tổng và trạm online
-      // 🟢 ĐÃ SỬA: Đổi sang cổng map/locations chuẩn để tránh lỗi 404
-      const stationRes = await fetch(
-        "http://localhost:5005/api/air-quality/map/locations"
-      );
+      const [stationRes, incidentRes] = await Promise.all([
+        fetch(STATIONS_URL),
+        fetch(INCIDENTS_URL),
+      ]);
       const stationResult = await stationRes.json();
+      const incidentResult = await incidentRes.json();
       const rawStations = stationResult.data || stationResult;
 
-      // 2. Tải danh sách sự cố tam giác (Incident) từ Admin
-      const incidentRes = await fetch(
-        "http://localhost:5005/api/sync/admin/incidents"
-      );
-      const incidentResult = await incidentRes.json();
-
       if (incidentResult.success && Array.isArray(rawStations)) {
-        // Lọc ra những đơn sự cố chưa hoàn thành (Pending hoặc In Progress) để KTV xử lý khẩn cấp
         const mappedCritical = incidentResult.data
           .filter((inc) => inc.status !== "Resolved")
-          .map((inc, index) => ({
-            id: inc.locationId?._id || "unknown",
-            incidentId: inc._id,
-            name: inc.locationId?.name || "Trạm khí tượng REMN",
-            region:
-              inc.locationId?.region === "Trung"
-                ? "Liên Chiểu, Đà Nẵng"
-                : inc.locationId?.region === "Bac"
-                ? "Hoàn Kiếm, Hà Nội"
-                : "Quận 1, TP. HCM",
-            issue: inc.issueDescription,
-            battery: inc.status === "Pending" ? "12%" : "68%",
-            signal:
-              inc.status === "Pending" ? "Yếu (-85 dBm)" : "Tốt (-52 dBm)",
-            status: inc.status === "Pending" ? "Critical" : "Warning",
-            time: "Thời gian thực",
-          }));
+          .map(normalizeCriticalStation);
 
         setCriticalStations(mappedCritical);
-
-        // Đồng bộ chuẩn đếm số lượng hiển thị lên 4 khối Metrics hình chữ nhật trên đầu UI
         setSystemStatus({
           totalStations: rawStations.length,
           onlineStations: rawStations.filter((s) => s.status === "Active")
@@ -83,23 +74,19 @@ const TechDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchTechDashboardData();
   }, []);
 
-  // =========================================================================
-  // ⚙️ HÀM GỬI LỆNH HIỆU CHUẨN (CALIBRATE) CỨU TRẠM VỀ MÀU XANH ACTIVE
-  // =========================================================================
-  const handleCalibrateSubmit = async (e) => {
-    e.preventDefault();
-    if (!selectedStation) return;
+  useEffect(() => {
+    void fetchTechDashboardData();
+  }, [fetchTechDashboardData]);
 
-    try {
-      const res = await fetch(
-        `http://localhost:5005/api/sync/tech/calibrate/${selectedStation.id}`,
-        {
+  const handleCalibrateSubmit = useCallback(
+    async (e) => {
+      e.preventDefault();
+      if (!selectedStation) return;
+
+      try {
+        const res = await fetch(`${CALIBRATE_URL}/${selectedStation.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -108,21 +95,55 @@ const TechDashboard = () => {
             sensorStatus: calibrateForm.sensorStatus,
             isFixed: calibrateForm.isFixed,
           }),
-        }
-      );
+        });
 
-      const result = await res.json();
-      if (result.success) {
-        alert(
-          `🎉 Hiệu chuẩn thành công! Trạm đo đã được đồng bộ trạng thái Active (Màu xanh) về bản đồ chính của User.`
-        );
-        setSelectedStation(null); // Đóng Popup Modal
-        fetchTechDashboardData(); // Tải lại dữ liệu mượt mà
+        const result = await res.json();
+        if (result.success) {
+          alert(
+            `🎉 Hiệu chuẩn thành công! Trạm đo đã được đồng bộ trạng thái Active (Màu xanh) về bản đồ chính của User.`
+          );
+          setSelectedStation(null);
+          await fetchTechDashboardData();
+        }
+      } catch (err) {
+        alert("Lỗi bắn lệnh hiệu chuẩn thiết bị lên server!");
       }
-    } catch (err) {
-      alert("Lỗi bắn lệnh hiệu chuẩn thiết bị lên server!");
-    }
-  };
+    },
+    [calibrateForm, fetchTechDashboardData, selectedStation]
+  );
+
+  const stats = useMemo(
+    () => [
+      {
+        label: "Tổng trạm cảm biến",
+        val: systemStatus.totalStations,
+        color: "text-blue-400",
+        bg: "bg-blue-500/5 border-blue-500/10",
+      },
+      {
+        label: "Trạm đang hoạt động",
+        val: systemStatus.onlineStations,
+        color: "text-emerald-400",
+        bg: "bg-emerald-500/5 border-emerald-500/10",
+        suffix: "✓ Online",
+      },
+      {
+        label: "Yêu cầu bảo trì",
+        val: systemStatus.maintenanceRequired,
+        color: "text-red-400",
+        bg: "bg-red-500/5 border-red-500/10",
+        suffix: "⚠ Khẩn cấp",
+      },
+      {
+        label: "Cảnh báo trạm dừng hỏng",
+        val: systemStatus.batteryAlerts,
+        color: "text-amber-400",
+        bg: "bg-amber-500/5 border-amber-500/10",
+        suffix: "🪫 Offline",
+      },
+    ],
+    [systemStatus]
+  );
 
   return (
     <div className="bg-[#0f172a] text-[#f8fafc] font-sans min-h-screen w-full flex flex-col antialiased selection:bg-blue-500/20">

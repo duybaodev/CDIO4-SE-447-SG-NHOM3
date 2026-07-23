@@ -1,69 +1,77 @@
-import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { Link } from "react-router-dom";
+
+const INCIDENTS_URL = "http://localhost:5005/api/sync/admin/incidents";
+
+const fallbackLogs = [
+  {
+    id: "LOG-9921",
+    stationId: "Trạm KCN Hòa Khánh",
+    engineer: "Lê Hoài Bảo",
+    action: "Thay mới cụm cảm biến quang học PM2.5",
+    date: "07/06/2026",
+    cost: "1.200.000 đ",
+    status: "Success",
+    type: "Thay thế",
+  },
+  {
+    id: "LOG-9874",
+    stationId: "Trạm Hoàn Kiếm B",
+    engineer: "Nguyễn Tuấn Kiệt",
+    action: "Thay cell Pin Li-Po 10.000mAh & bo sạc Solar",
+    date: "06/06/2026",
+    cost: "850.000 đ",
+    status: "Success",
+    type: "Sửa chữa",
+  },
+];
+
+const normalizeIncident = (inc, index) => ({
+  id: `LOG-9${50 + index}`,
+  stationId: inc.locationId?.name || "Hạ tầng REMN",
+  engineer: inc.assignedTechId?.username || "Lê Hoài Bảo",
+  action: inc.issueDescription,
+  date: new Date(inc.updatedAt).toLocaleDateString("vi-VN"),
+  cost: inc.status === "Resolved" ? "450.000 đ" : "0 đ",
+  status: inc.status === "Resolved" ? "Success" : "Pending",
+  type: inc.status === "Resolved" ? "Khắc phục xong" : "Đang bảo trì",
+});
 
 const Logs = () => {
-  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState("all");
   const [maintenanceLogs, setMaintenanceLogs] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchRealLogs = async () => {
+  const fetchRealLogs = useCallback(async () => {
     try {
       setLoading(true);
-      // 🟢 ĐÃ SỬA: Đầu URL kết nối sạch sẽ, không chứa ký tự Linux gây crash lỗi 404
-      const res = await fetch("http://localhost:5005/api/sync/admin/incidents");
+      const res = await fetch(INCIDENTS_URL);
       const result = await res.json();
 
-      if (result.success) {
-        setMaintenanceLogs(
-          result.data.map((inc, index) => ({
-            id: `LOG-9${50 + index}`,
-            stationId: inc.locationId?.name || "Hạ tầng REMN",
-            engineer: inc.assignedTechId?.username || "Lê Hoài Bảo",
-            action: inc.issueDescription,
-            date: new Date(inc.updatedAt).toLocaleDateString("vi-VN"),
-            cost: inc.status === "Resolved" ? "450.000 đ" : "0 đ",
-            status: inc.status === "Resolved" ? "Success" : "Pending",
-            type: inc.status === "Resolved" ? "Khắc phục xong" : "Đang bảo trì",
-          }))
-        );
+      if (result.success && Array.isArray(result.data)) {
+        setMaintenanceLogs(result.data.map(normalizeIncident));
+      } else {
+        setMaintenanceLogs(fallbackLogs);
       }
     } catch (err) {
-      setMaintenanceLogs([
-        {
-          id: "LOG-9921",
-          stationId: "Trạm KCN Hòa Khánh",
-          engineer: "Lê Hoài Bảo",
-          action: "Thay mới cụm cảm biến quang học PM2.5",
-          date: "07/06/2026",
-          cost: "1.200.000 đ",
-          status: "Success",
-          type: "Thay thế",
-        },
-        {
-          id: "LOG-9874",
-          stationId: "Trạm Hoàn Kiếm B",
-          engineer: "Nguyễn Tuấn Kiệt",
-          action: "Thay cell Pin Li-Po 10.000mAh & bo sạc Solar",
-          date: "06/06/2026",
-          cost: "850.000 đ",
-          status: "Success",
-          type: "Sửa chữa",
-        },
-      ]);
+      setMaintenanceLogs(fallbackLogs);
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchRealLogs();
   }, []);
 
-  const filteredLogs = maintenanceLogs.filter((log) => {
-    if (statusFilter === "all") return true;
-    return log.status.toLowerCase() === statusFilter.toLowerCase();
-  });
+  useEffect(() => {
+    void fetchRealLogs();
+  }, [fetchRealLogs]);
+
+  const filteredLogs = useMemo(
+    () =>
+      maintenanceLogs.filter((log) => {
+        if (statusFilter === "all") return true;
+        return log.status.toLowerCase() === statusFilter.toLowerCase();
+      }),
+    [maintenanceLogs, statusFilter]
+  );
 
   return (
     <div className="bg-[#0f172a] text-[#f8fafc] font-sans min-h-screen w-full flex flex-col antialiased">

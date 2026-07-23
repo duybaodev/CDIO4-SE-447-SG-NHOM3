@@ -1,5 +1,32 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
+
+const MAP_LOCATIONS_URL = "http://localhost:5005/api/air-quality/map/locations";
+const TECH_SYNC_URL = "http://localhost:5005/api/sync/tech/calibrate";
+
+const getRandomPercent = (min, max) =>
+  `${Math.floor(Math.random() * (max - min + 1)) + min}%`;
+
+const normalizeDevice = (station) => ({
+  id: station._id,
+  name: station.name,
+  type: station.version || "Station V2.5",
+  cpu: station.hardwareSpecs?.cpuUsage
+    ? `${station.hardwareSpecs.cpuUsage}%`
+    : getRandomPercent(15, 39),
+  ram: station.hardwareSpecs?.ramUsage
+    ? `${station.hardwareSpecs.ramUsage}%`
+    : getRandomPercent(35, 64),
+  pm25_status:
+    station.status === "Active"
+      ? "Good"
+      : station.status === "Disabled"
+      ? "Calibrating"
+      : "Offline",
+  gas_sensor:
+    station.hardwareSpecs?.sensorStatus ||
+    (station.status === "Active" ? "Ổn định" : "Lỗi vi mạch"),
+});
 
 const Devices = () => {
   const navigate = useNavigate();
@@ -7,89 +34,72 @@ const Devices = () => {
   const [deviceList, setDeviceList] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchHardwareDevices = async () => {
+  const fetchHardwareDevices = useCallback(async () => {
     try {
       setLoading(true);
-      // 🟢 ĐÃ SỬA: Thay đổi link lấy dữ liệu trạm thật từ Compass
-      const res = await fetch(
-        "http://localhost:5005/api/air-quality/map/locations"
-      );
+      const res = await fetch(MAP_LOCATIONS_URL);
       const result = await res.json();
       const rawStations = result.data || result;
 
       if (Array.isArray(rawStations)) {
-        setDeviceList(
-          rawStations.map((s) => ({
-            id: s._id,
-            name: s.name,
-            type: s.version || "Station V2.5",
-            cpu: s.hardwareSpecs?.cpuUsage
-              ? `${s.hardwareSpecs.cpuUsage}%`
-              : `${Math.floor(Math.random() * 25) + 15}%`,
-            ram: s.hardwareSpecs?.ramUsage
-              ? `${s.hardwareSpecs.ramUsage}%`
-              : `${Math.floor(Math.random() * 30) + 35}%`,
-            pm25_status:
-              s.status === "Active"
-                ? "Good"
-                : s.status === "Disabled"
-                ? "Calibrating"
-                : "Offline",
-            gas_sensor:
-              s.hardwareSpecs?.sensorStatus ||
-              (s.status === "Active" ? "Ổn định" : "Lỗi vi mạch"),
-          }))
-        );
+        setDeviceList(rawStations.map(normalizeDevice));
       }
     } catch (err) {
       console.error("Lỗi đồng bộ thiết bị phần cứng:", err);
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchHardwareDevices();
   }, []);
 
-  const triggerHardwareAction = async (id, actionName, stationName) => {
-    if (actionName === "REBOOT") {
-      if (
-        window.confirm(
-          `Bảo có chắc chắn phát lệnh REBOOT từ xa đến trạm ${stationName}?`
-        )
-      ) {
-        try {
-          await fetch(`http://localhost:5005/api/sync/tech/calibrate/${id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              cpuUsage: 12,
-              ramUsage: 35,
-              sensorStatus: "Ổn định",
-              isFixed: true,
-            }),
-          });
-          alert(
-            `[REBOOT COMMAND SUCCESS] Trạm ${stationName} khởi động lại thành công!`
-          );
-          fetchHardwareDevices();
-        } catch (err) {
-          alert("Lỗi gửi lệnh điều khiển!");
-        }
-      }
-    } else {
-      alert(
-        `[ĐIỀU HƯỚNG] Quay lại trung tâm để dùng panel Calibrate cho trạm ${stationName}.`
-      );
-      navigate("/tech/dashboard");
-    }
-  };
+  useEffect(() => {
+    void fetchHardwareDevices();
+  }, [fetchHardwareDevices]);
 
-  const filteredDevices = deviceList.filter(
-    (dev) =>
-      dev.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      dev.id.toLowerCase().includes(searchTerm.toLowerCase())
+  const triggerHardwareAction = useCallback(
+    async (id, actionName, stationName) => {
+      if (actionName === "REBOOT") {
+        if (
+          window.confirm(
+            `Bảo có chắc chắn phát lệnh REBOOT từ xa đến trạm ${stationName}?`
+          )
+        ) {
+          try {
+            await fetch(`${TECH_SYNC_URL}/${id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                cpuUsage: 12,
+                ramUsage: 35,
+                sensorStatus: "Ổn định",
+                isFixed: true,
+              }),
+            });
+            alert(
+              `[REBOOT COMMAND SUCCESS] Trạm ${stationName} khởi động lại thành công!`
+            );
+            await fetchHardwareDevices();
+          } catch (err) {
+            alert("Lỗi gửi lệnh điều khiển!");
+          }
+        }
+      } else {
+        alert(
+          `[ĐIỀU HƯỚNG] Quay lại trung tâm để dùng panel Calibrate cho trạm ${stationName}.`
+        );
+        navigate("/tech/dashboard");
+      }
+    },
+    [fetchHardwareDevices, navigate]
+  );
+
+  const filteredDevices = useMemo(
+    () =>
+      deviceList.filter(
+        (dev) =>
+          dev.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          dev.id.toLowerCase().includes(searchTerm.toLowerCase())
+      ),
+    [deviceList, searchTerm]
   );
 
   return (
